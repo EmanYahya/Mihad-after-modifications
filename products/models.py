@@ -3,6 +3,8 @@ from django.urls import reverse
 from django.contrib.auth.models import User
 from slugify import slugify
 
+
+# الاقسام
 class Category(models.Model):
     id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=200)
