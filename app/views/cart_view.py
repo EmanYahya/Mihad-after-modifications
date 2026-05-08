@@ -179,6 +179,12 @@ def checkout(request):
         product.id: product
         for product in Product.objects.select_for_update().filter(id__in=[item.product_id for item in cart_items])
     }
+    missing_product_ids = [item.product_id for item in cart_items if item.product_id not in locked_products]
+    if missing_product_ids:
+        return Response({
+            "error": "Some cart products are no longer available",
+            "product_ids": missing_product_ids,
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     for item in cart_items:
         product = locked_products[item.product_id]
