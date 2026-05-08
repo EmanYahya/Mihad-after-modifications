@@ -1,16 +1,35 @@
 import os
 
+from django.core.exceptions import ImproperlyConfigured
+from django.core.management.utils import get_random_secret_key
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-SECRET_KEY = 'bdu0600052'
 
-DEBUG = True
+def env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+def env_list(name, default=None):
+    value = os.environ.get(name)
+    if value is None:
+        return default or []
+    return [item.strip() for item in value.split(',') if item.strip()]
 
 
+DEBUG = env_bool('DEBUG', True)
 
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = get_random_secret_key()
+    else:
+        raise ImproperlyConfigured('SECRET_KEY environment variable is required when DEBUG is false')
+
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', ['127.0.0.1', 'localhost'])
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -22,7 +41,7 @@ INSTALLED_APPS = [
 
     'corsheaders',
     'rest_framework',
-    'rest_framework.authtoken',  
+    'rest_framework.authtoken',
     'app',
     'products',
 ]
@@ -38,7 +57,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', DEBUG)
+CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS', [])
 
 ROOT_URLCONF = 'config.urls'
 
@@ -48,9 +68,8 @@ TEMPLATES = [
         'DIRS': [
             os.path.join(BASE_DIR, 'templates'),
             os.path.join(BASE_DIR, 'app', 'templates'),
-            # os.path.join(BASE_DIR, 'accounts', 'templates'),
             os.path.join(BASE_DIR, 'products', 'templates'),
-            ],
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -65,19 +84,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
+DB_ENGINE = os.environ.get('DB_ENGINE', 'django.db.backends.mysql')
 DATABASES = {
     'default': {
-         'ENGINE': 'django.db.backends.mysql',
-         'NAME': 'mihad_db',
-         'USER': 'root',
-         'PASSWORD': '',
-         'HOST': 'localhost',
-         'PORT': '3307',
-         'OPTIONS': {
-            'charset': 'utf8mb4',
-        },
+        'ENGINE': DB_ENGINE,
+        'NAME': os.environ.get('DB_NAME', 'mihad_db'),
+        'USER': os.environ.get('DB_USER', 'root'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '3307'),
     },
 }
+
+if DB_ENGINE == 'django.db.backends.mysql':
+    DATABASES['default']['OPTIONS'] = {
+        'charset': os.environ.get('DB_CHARSET', 'utf8mb4'),
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -105,24 +127,9 @@ USE_L10N = True
 USE_TZ = True
 
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static'),
-]
+_static_dir = os.path.join(BASE_DIR, 'static')
+STATICFILES_DIRS = [_static_dir] if os.path.isdir(_static_dir) else []
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-from django.db.backends.mysql.base import DatabaseWrapper
-from django.db.backends.mysql.features import DatabaseFeatures
-
-# 1. تخطي فحص الإصدار
-DatabaseWrapper.check_database_version_supported = lambda self: None
-
-# 2. إجبار Django على عدم استخدام خاصية RETURNING نهائياً
-def patch_database_features(self):
-    return False
-
-DatabaseFeatures.can_return_rows_from_bulk_insert = property(patch_database_features)
-DatabaseFeatures.can_return_columns_from_insert = property(patch_database_features)
-DatabaseFeatures.has_select_for_update_skip_locked = property(patch_database_features)

@@ -27,7 +27,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'name',
             'description',
             'price',
-            'main_image ',
+            'main_image',
             'slug',
             'stock',
             'low_stock_threshold',
@@ -39,6 +39,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'subcategory_name',
             'available_sizes',
             'available_colors',
+            'images',
             'created_at'
         ]
 
