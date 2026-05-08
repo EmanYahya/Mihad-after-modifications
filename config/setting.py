@@ -1,5 +1,8 @@
 import os
 
+from django.core.exceptions import ImproperlyConfigured
+from django.core.management.utils import get_random_secret_key
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -22,9 +25,9 @@ DEBUG = env_bool('DEBUG', True)
 SECRET_KEY = os.environ.get('SECRET_KEY')
 if not SECRET_KEY:
     if DEBUG:
-        SECRET_KEY = 'unsafe-local-development-secret-key'
+        SECRET_KEY = get_random_secret_key()
     else:
-        raise RuntimeError('SECRET_KEY environment variable is required when DEBUG is false')
+        raise ImproperlyConfigured('SECRET_KEY environment variable is required when DEBUG is false')
 
 ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', ['127.0.0.1', 'localhost'])
 
