@@ -3,42 +3,43 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-from app.models import Cart, Product, Order
-from app.models.cart import OrderItem 
-from ..serializers import CartSerializer # تأكدي من المسار الصحيح للسيرياليزر
+from app.models import Cart, Product, Order, Color, Size
+from app.models.cart import OrderItem
+from ..serializers import CartSerializer
 from django.db import transaction
-from django.db.models import Sum, Count
+from django.db.models import Sum, Prefetch
 from django.db.models.functions import TruncDay
 from datetime import timedelta
 from django.utils import timezone
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser]) # للأدمن فقط
+@permission_classes([IsAdminUser])
 def admin_dashboard_analytics(request):
-    # 1. الـ Cards (إحصائيات سريعة)
     total_sales = Order.objects.aggregate(Sum('total_price'))['total_price__sum'] or 0
     orders_count = Order.objects.count()
-    # تنبيه المخزون من المنتجات (أقل من 5 قطع)
     low_stock_count = Product.objects.filter(stock__lte=5).count()
 
-    # 2. الـ Table (جدول الطلبات بالتواريخ)
-    # بنجيب آخر 10 طلبات مرتبة من الأحدث للأقدم
-    recent_orders = Order.objects.select_related('user').order_by('-created_at')[:10]
-    orders_table_data = [
-        {
-            "id": order.id,
-            "customer": order.full_name, # من موديل Order
-            "total": order.total_price,
-            "image": OrderItem.product.main_image.url if OrderItem.product.main_image else None,
-            "status": order.get_status_display(), # يعرض (تم الشحن، قيد الانتظار...)
-            "date": order.created_at.strftime("%Y-%m-%d %H:%M"),
-            "address": f"{order.city}, {order.address}", # 👈 تم إضافة المدينة والعنوان هنا
-            "phone": order.phone 
-        } for order in recent_orders
-    ]
+    recent_orders = Order.objects.select_related('user').prefetch_related(
+        Prefetch('items', queryset=OrderItem.objects.select_related('product').order_by('id'))
+    ).order_by('-created_at')[:10]
 
-    # 3. الـ Charts (بيانات الرسم البياني لآخر 7 أيام)
+    orders_table_data = []
+    for order in recent_orders:
+        first_item = next(iter(order.items.all()), None)
+        product = first_item.product if first_item else None
+        image = product.main_image.url if product and product.main_image else None
+        orders_table_data.append({
+            "id": order.id,
+            "customer": order.full_name,
+            "total": order.total_price,
+            "image": image,
+            "status": order.get_status_display(),
+            "date": order.created_at.strftime("%Y-%m-%d %H:%M"),
+            "address": f"{order.city}, {order.address}",
+            "phone": order.phone,
+        })
+
     seven_days_ago = timezone.now() - timedelta(days=7)
     sales_over_time = Order.objects.filter(created_at__gte=seven_days_ago)\
         .annotate(day=TruncDay('created_at'))\
@@ -63,40 +64,46 @@ def admin_dashboard_analytics(request):
         "sales_chart": chart_data
     })
 
-# ==========================================
-# 🛒 دوال خاصة بالمستخدم المسجل فقط (IsAuthenticated)
-# ==========================================
 
-# 1. عرض محتويات السلة
 @api_view(['GET'])
-@permission_classes([IsAuthenticated]) # حماية: لا يراها إلا صاحب الحساب
+@permission_classes([IsAuthenticated])
 def cart_detail(request):
-    cart_items = Cart.objects.filter(user=request.user).select_related('product')
-    
-    # يفضل استخدام السيرياليزر الذي قمتِ بتعريفه في serializers.py
+    cart_items = Cart.objects.filter(user=request.user).select_related('product', 'color', 'size')
     serializer = CartSerializer(cart_items, many=True)
-    
     total_price = sum(item.product.price * item.quantity for item in cart_items)
 
     return Response({
         "success": True,
         "data": {
-             "items": serializer.data,
-             "total_price": total_price
+            "items": serializer.data,
+            "total_price": total_price
         }
     })
 
-# 2. إضافة منتج للسلة
+
 @api_view(['POST'])
-@permission_classes([IsAuthenticated]) # حماية: لا يمكن إضافة منتج إلا لمستخدم مسجل
+@permission_classes([IsAuthenticated])
 def add_to_cart(request):
     product_id = request.data.get('product_id')
     if not product_id:
         return Response({"success": False, "message": "product_id required"}, status=status.HTTP_400_BAD_REQUEST)
 
     product = get_object_or_404(Product, id=product_id)
+    color = None
+    size = None
+    color_id = request.data.get('color_id')
+    size_id = request.data.get('size_id')
 
-    #  تحقق من المخزون
+    if color_id:
+        color = get_object_or_404(Color, id=color_id)
+        if not product.available_colors.filter(id=color.id).exists():
+            return Response({"success": False, "message": "Selected color is not available for this product"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if size_id:
+        size = get_object_or_404(Size, id=size_id)
+        if not product.available_sizes.filter(id=size.id).exists():
+            return Response({"success": False, "message": "Selected size is not available for this product"}, status=status.HTTP_400_BAD_REQUEST)
+
     if product.stock <= 0:
         return Response({
             "success": False,
@@ -105,28 +112,27 @@ def add_to_cart(request):
 
     cart_item, created = Cart.objects.get_or_create(
         user=request.user,
-        product=product
+        product=product,
+        color=color,
+        size=size,
     )
 
-    #  تحقق من الكمية قبل الزيادة
     if not created:
         if cart_item.quantity + 1 > product.stock:
             return Response({
                 "success": False,
                 "message": "الكمية المطلوبة غير متوفرة"
             }, status=status.HTTP_400_BAD_REQUEST)
-
         cart_item.quantity += 1
         cart_item.save()
 
-    return Response({"success": True, "message": "Added to cart"}, status=status.HTTP_201_CREATED)
+    return Response({"success": True, "message": "Added to cart", "cart_item_id": cart_item.id}, status=status.HTTP_201_CREATED)
 
-# 3. تحديث الكمية في السلة
+
 @api_view(['POST'])
-@permission_classes([IsAuthenticated]) # حماية: المستخدم يحدث سلته الشخصية فقط
+@permission_classes([IsAuthenticated])
 def update_cart_item(request, cart_item_id):
-    # التأكد أن العنصر يخص المستخدم الحالي (user=request.user)
-    cart_item = get_object_or_404(Cart, id=cart_item_id, user=request.user)
+    cart_item = get_object_or_404(Cart.objects.select_related('product'), id=cart_item_id, user=request.user)
 
     quantity = request.data.get('quantity', 1)
     try:
@@ -135,67 +141,83 @@ def update_cart_item(request, cart_item_id):
         return Response({"success": False, "message": "Invalid quantity"}, status=status.HTTP_400_BAD_REQUEST)
 
     if quantity > 0:
-     if quantity > cart_item.product.stock:
-        return Response({
-            "success": False,
-            "message": "الكمية غير متوفرة في المخزن"
-        }, status=status.HTTP_400_BAD_REQUEST)
+        if quantity > cart_item.product.stock:
+            return Response({
+                "success": False,
+                "message": "الكمية غير متوفرة في المخزن"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        cart_item.quantity = quantity
+        cart_item.save()
+        return Response({"success": True, "message": "Cart item updated", "quantity": cart_item.quantity})
 
-     cart_item.quantity = quantity
-     cart_item.save() 
-     
-    else:
-        cart_item.delete()
-        return Response({"success": True, "message": "Item removed from cart"})
+    cart_item.delete()
+    return Response({"success": True, "message": "Item removed from cart"})
 
-# 4. حذف منتج من السلة
+
 @api_view(['DELETE', 'POST'])
-@permission_classes([IsAuthenticated]) # حماية: لا يحذف إلا صاحب السلة
+@permission_classes([IsAuthenticated])
 def remove_from_cart(request, cart_item_id):
-    # تم دمج الحماية هنا من خلال الفلترة بالمستخدم الحالي مباشرة
     cart_item = get_object_or_404(Cart, id=cart_item_id, user=request.user)
     cart_item.delete()
     return Response({"message": "تم حذف المنتج من السلة بنجاح"}, status=status.HTTP_204_NO_CONTENT)
 
 
-# ==========================================
-# 💳 دالة إتمام الطلب (Checkout)
-# ==========================================
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 @transaction.atomic
 def checkout(request):
-    # 1. بنجيب الحاجات اللي العميل اختارها في السلة فعلاً
-    cart_items = Cart.objects.filter(user=request.user).select_related('product', 'color', 'size')
-    
-    if not cart_items.exists():
-        return Response({"error": "السلة فارغة"})
+    required_fields = ['full_name', 'email', 'phone', 'address', 'city']
+    missing_fields = [field for field in required_fields if not request.data.get(field)]
+    if missing_fields:
+        return Response({"error": "Missing required shipping fields", "fields": missing_fields}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 2. بنحسب السعر الإجمالي أوتوماتيك
-    total_price = sum(item.product.price * item.quantity for item in cart_items)
+    cart_items = list(Cart.objects.filter(user=request.user).select_related('product', 'color', 'size'))
+    if not cart_items:
+        return Response({"error": "السلة فارغة"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 3. بنعمل الأوردر
+    locked_products = {
+        product.id: product
+        for product in Product.objects.select_for_update().filter(id__in=[item.product_id for item in cart_items])
+    }
+
+    for item in cart_items:
+        product = locked_products[item.product_id]
+        if item.quantity > product.stock:
+            return Response({
+                "error": "Insufficient stock",
+                "product_id": product.id,
+                "available_stock": product.stock,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    total_price = sum(locked_products[item.product_id].price * item.quantity for item in cart_items)
+
     order = Order.objects.create(
         user=request.user,
+        full_name=request.data['full_name'],
+        email=request.data['email'],
+        phone=request.data['phone'],
+        address=request.data['address'],
+        city=request.data['city'],
         total_price=total_price,
-        # باقي بيانات الشحن بتيجي من request.data
     )
 
-    # 4. السطر ده هو اللي "بيسحب" الاختيارات أوتوماتيك للأوردر
     for item in cart_items:
+        product = locked_products[item.product_id]
         OrderItem.objects.create(
             order=order,
-            product=item.product,
-            color=item.color,      # سحب اللون اللي العميل اختاره في السلة أوتوماتيك
-            size=item.size,        # سحب المقاس اللي العميل اختاره في السلة أوتوماتيك
-            price=item.product.price, # سحب السعر الحالي للمنتج أوتوماتيك
-            quantity=item.quantity
+            product=product,
+            color=item.color.name if item.color else None,
+            size=item.size.name if item.size else None,
+            price=product.price,
+            quantity=item.quantity,
         )
-        
-        # خصم المخزون أوتوماتيك
-        item.product.stock -= item.quantity
-        item.product.save()
+        product.stock -= item.quantity
+        product.save(update_fields=['stock'])
 
-    # 5. فضي السلة
-    cart_items.delete()
+    Cart.objects.filter(id__in=[item.id for item in cart_items]).delete()
 
-    return Response({"message": "تم تسجيل طلبك بنجاح"})
+    return Response({
+        "message": "تم تسجيل طلبك بنجاح",
+        "order_id": order.id,
+        "total_price": order.total_price,
+    }, status=status.HTTP_201_CREATED)

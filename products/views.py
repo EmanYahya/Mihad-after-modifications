@@ -1,23 +1,26 @@
-from email.mime import image
-
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from app import models
-from .models import Category, Product, ProductImage
-from app.serializers import ProductSerializer 
+from django.db.models import F
 from django.shortcuts import get_object_or_404
 
-from products import models
+from .models import Category, Product, ProductImage
+from app.serializers import ProductSerializer
 
-# =========================
-#  إضافة صورة للمنتج
+
+def can_manage_product_images(user, product):
+    return user.is_staff or user.is_superuser or product.seller_id == user.id
+
+
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def upload_multiple_images(request, product_id):
     product = get_object_or_404(Product, id=product_id)
+    if not can_manage_product_images(request.user, product):
+        return Response({"error": "Not allowed"}, status=403)
 
-    images = request.FILES.getlist('images')  # 👈 أهم سطر
+    images = request.FILES.getlist('images')
     color_id = request.data.get('color')
 
     if not images:
@@ -41,8 +44,7 @@ def upload_multiple_images(request, product_id):
         "images": created_images
     })
 
-# =========================
-#  عرض صور المنتج
+
 @api_view(['GET'])
 def product_images(request, product_id):
     product = get_object_or_404(Product, id=product_id)
@@ -58,18 +60,20 @@ def product_images(request, product_id):
 
     return Response(data)
 
-#--------------------------
-#حذف صورة من صور المنتج
 
 @api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
 def delete_image(request, image_id):
-    image = get_object_or_404(ProductImage, id=image_id)
+    image = get_object_or_404(ProductImage.objects.select_related('product'), id=image_id)
+    if not can_manage_product_images(request.user, image.product):
+        return Response({"error": "Not allowed"}, status=403)
     image.delete()
     return Response({"message": "Deleted"})
 
+
 @api_view(['GET'])
 def low_stock_products(request):
-    products = Product.objects.filter(stock__lte=models.F('low_stock_threshold'))
+    products = Product.objects.filter(stock__lte=F('low_stock_threshold'))
 
     data = [
         {
@@ -82,6 +86,7 @@ def low_stock_products(request):
     return Response({
         "low_stock_products": data
     })
+
 
 @api_view(['GET'])
 def product_detail(request, category_slug, subcategory_slug, product_slug):
@@ -96,7 +101,6 @@ def product_detail(request, category_slug, subcategory_slug, product_slug):
     return Response(serializer.data)
 
 
-# 📦 تفاصيل منتج
 @api_view(['GET'])
 def product_list(request):
     products = Product.objects.all()
@@ -104,7 +108,6 @@ def product_list(request):
     return Response(serializer.data)
 
 
-# ➕ إضافة منتج
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def product_upload(request):
@@ -117,13 +120,11 @@ def product_upload(request):
     return Response(serializer.errors)
 
 
-# ✏️ تعديل منتج
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
 def update_product(request, id):
     product = get_object_or_404(Product, id=id)
 
-    # optional: ownership check
     if product.seller != request.user:
         return Response({"error": "Not allowed"}, status=403)
 
@@ -135,7 +136,7 @@ def update_product(request, id):
 
     return Response(serializer.errors)
 
-# ❌ حذف منتج
+
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_product(request, id):
@@ -147,16 +148,14 @@ def delete_product(request, id):
     product.delete()
     return Response({"message": "Deleted"})
 
-# جلب قائمة الفئات (Categories)
+
 @api_view(['GET'])
 def category_list(request):
     categories = Category.objects.all()
-    # ملحوظة: ستحتاجين لعمل Serializer للفئات إذا لم يكن موجوداً
-    # حالياً سنقوم بإرجاع أسماء الفئات فقط كمثال بسيط
     data = [{"id": cat.id, "name": cat.name} for cat in categories]
     return Response(data)
 
-# جلب المنتجات التابعة لفئة معينة (Category)
+
 @api_view(['GET'])
 def category_products(request, category_slug):
     category = get_object_or_404(Category, slug=category_slug)
@@ -164,10 +163,9 @@ def category_products(request, category_slug):
     serializer = ProductSerializer(products, many=True)
     return Response(serializer.data)
 
-# جلب المنتجات التابعة لقسم فرعي (Subcategory)
+
 @api_view(['GET'])
 def subcategory_products(request, category_slug, subcategory_slug):
-    # بنجيب المنتجات اللي تابعة للـ category والـ subcategory مع بعض من خلال الـ slug
     products = Product.objects.filter(
         category__slug=category_slug,
         subcategory__slug=subcategory_slug
