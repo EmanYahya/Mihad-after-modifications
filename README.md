@@ -1,52 +1,125 @@
-- register
-  app/auth/register/
-- login
-  app/auth/login/
-  app/auth/logout
-- cart
-  - app/api/cart/ (cart details)
-  - app/api/cart/add/ (add cart)
-  - app/api/cart/update/<int:cart_item_id>/ (update cart)
-  - app/api/cart/remove/<int:cart_item_id>/ (remove cart)
-  - app/api/cart/checkout/ (confirm purchase)
+# 🛍️ Mihad E-Commerce Backend
 
-- home
-  app/home/
+A professional backend system for an e-commerce platform built using Django and Django REST Framework.
+The project handles products, categories, cart management, orders, and checkout processes with real-world business logic.
 
-- search
-  app/search/
+---
 
-- wishlist
-  app/wishlist/
+## 🚀 Features
 
-- wishlist actions
-  app/add-to-wishlist/<int:product_id>/ (add wishlist)
-  app/remove-from-wishlist/<int:product_id>/ (remove wishlist)
+* Product management (CRUD)
+* Category & subcategory support
+* Product variations (Size / Color)
+* Cart system
+* Order & checkout logic
+* Handling missing products during checkout
+* Secure settings (no hardcoded secrets)
+* Clean project structure using Django apps
 
-- admin
-  - app/api/admin/dashboard/ (GET)
-  - products/add/ (POST)
-  - products/<int:product_id>/upload-images/ (POST)
+---
 
-- products
-  - products/<int:product_id>/images/ (GET)
-  - products/product-list/ (GET)
+## 🧱 Tech Stack
 
-- category
-  - products/category-list/ (GET)
-  - products/category/<slug:category_slug>/ (GET)
-  - products/product/<slug:category_slug>/<slug:subcategory_slug>/<slug:product_slug>/ (GET product detail)
+* Python
+* Django
+* Django REST Framework (DRF)
+* SQLite (can be replaced with PostgreSQL)
+* Git & GitHub
 
-- subcategory
-  - products/category/<slug:category_slug>/subcategory/<slug:subcategory_slug>/ (GET)
+---
 
-Setup:
-1. Install dependencies: `pip install -r requirements.txt`
-2. Configure environment variables as needed:
-   - `SECRET_KEY` (required when `DEBUG=false`)
-   - `DEBUG` (`true` for local development, `false` for production)
-   - `ALLOWED_HOSTS` (comma-separated hosts, for example `example.com,www.example.com`)
-   - `DB_ENGINE` (defaults to `django.db.backends.mysql`)
-   - `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_CHARSET`
-   - `CORS_ALLOW_ALL_ORIGINS` or `CORS_ALLOWED_ORIGINS` (comma-separated origins)
-3. Run migrations with the configured database.
+## 📁 Project Structure
+
+```
+Mihad-after-modifications/
+│
+├── app/            # Core app (users, orders, cart)
+├── products/       # Product logic (models, views, serializers)
+├── config/         # Project settings
+├── staticfiles/    # Static assets
+├── manage.py
+└── README.md
+```
+
+---
+
+## ⚙️ Installation
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/EmanYahya/Mihad-after-modifications.git
+cd Mihad-after-modifications
+```
+
+### 2. Create virtual environment
+
+```bash
+python -m venv venv
+source venv/bin/activate   # Linux / Mac
+venv\Scripts\activate      # Windows
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Run migrations
+
+```bash
+python manage.py migrate
+```
+
+### 5. Run server
+
+```bash
+python manage.py runserver
+```
+
+---
+
+## 🔗 API Endpoints (Examples)
+
+### Products
+
+* `GET /products/` → Get all products
+* `GET /products/<id>/` → Get product details
+
+### Cart
+
+* `POST /cart/` → Add to cart
+* `GET /cart/` → View cart
+
+### Orders
+
+* `POST /checkout/` → Place order
+
+---
+
+## 🧠 Business Logic Highlights
+
+* Prevents checkout with unavailable products
+* Supports product variations (size & color)
+* Handles edge cases in cart operations
+
+---
+
+## 🔐 Security
+
+* Sensitive data is not hardcoded
+* Environment-based configuration recommended
+
+---
+
+## 🚧 Future Improvements
+
+* Add pagination & filtering
+* Implement search functionality
+* Add Swagger API documentation
+* Optimize performance
+* Deploy to cloud (Render / Railway)
+
+---
+
