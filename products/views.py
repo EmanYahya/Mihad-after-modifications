@@ -151,7 +151,6 @@ def delete_product(request, id):
 @api_view(['GET'])
 def category_list(request):
     categories = Category.objects.all()
-    # ملحوظة: ستحتاجين لعمل Serializer للفئات إذا لم يكن موجوداً
     # حالياً سنقوم بإرجاع أسماء الفئات فقط كمثال بسيط
     data = [{"id": cat.id, "name": cat.name} for cat in categories]
     return Response(data)

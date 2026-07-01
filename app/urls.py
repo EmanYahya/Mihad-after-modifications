@@ -3,7 +3,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 # استيراد الدوال مباشرة (يفضل تحديد الأسماء بوضوح)
-from .views.api_views import get_products
+from .views.api_views import ProductViewSet 
 from .views.home_view import home
 from .views.category_view import category_list, category_create, category_edit, category_delete
 # from .views.product_view import (product_list, product_detail, product_create, product_update, product_delete, category_products)

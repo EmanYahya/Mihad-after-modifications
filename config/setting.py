@@ -7,7 +7,7 @@ SECRET_KEY = 'bdu0600052'
 DEBUG = True
 
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['Mihad.pythonanywhere.com', '127.0.0.1', 'localhost']
 
 
 
@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',  
     'app',
     'products',
+    'drf_yasg'
 ]
 
 MIDDLEWARE = [
