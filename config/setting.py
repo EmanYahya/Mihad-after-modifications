@@ -92,21 +92,15 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DB_ENGINE = os.environ.get('DB_ENGINE', 'django.db.backends.mysql')
 DATABASES = {
-   'default': {
+    'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.environ.get('DB_NAME', 'defaultdb'),
-        'USER': os.environ.get('DB_USER', 'avnadmin'),
+        'NAME': os.environ.get('DB_NAME', 'mihad_db'),
+        'USER': os.environ.get('DB_USER', 'root'),
         'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-        'HOST': os.environ.get('DB_HOST', 'mysql-25b0a623-eyahya447-34f5.j.aivencloud.com'),
-        'PORT': os.environ.get('DB_PORT', '10984'),
-        'OPTIONS': {
-            'ssl': {
-                'ssl_mode': 'REQUIRED'
-            }
-        },
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '3307'),
     }
 }
-
 if DB_ENGINE == 'django.db.backends.mysql':
     DATABASES['default']['OPTIONS'] = {
         'charset': os.environ.get('DB_CHARSET', 'utf8mb4'),
